@@ -18,17 +18,12 @@ export type Transition = {
   from: string;
   to: string;
   probability: number | null;
-  /** Exact text copied from the image near the arrow */
-  rawText?: string | null;
-  /** Chain-of-thought reasoning for the probability conversion */
-  reasoning?: string | null;
   confidence?: number;
 };
 
 export type ExtractedGraph = {
   states: StateNode[];
   transitions: Transition[];
-  notes?: string[];
 };
 
 // ---------------------------------------------------------------------------

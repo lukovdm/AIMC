@@ -38,16 +38,12 @@ interface BackendTransition {
   to_state: string;
   action: string | null;
   probability: number | null;
-  raw_text: string | null;
-  reasoning: string | null;
   confidence: number;
 }
 
 interface BackendModel {
   states: BackendState[];
   transitions: BackendTransition[];
-  unattached_text: unknown[];
-  notes: string[];
 }
 
 interface UploadResponse {
@@ -75,12 +71,10 @@ function backendToGraph(model: BackendModel): ExtractedGraph {
     from: t.from_state,
     to: t.to_state,
     probability: t.probability,
-    rawText: t.raw_text,
-    reasoning: t.reasoning,
     confidence: t.confidence,
   }));
 
-  return { states, transitions, notes: model.notes };
+  return { states, transitions };
 }
 
 // ---------------------------------------------------------------------------
@@ -101,12 +95,10 @@ function graphToBackend(graph: ExtractedGraph): BackendModel {
     to_state: t.to,
     action: null,
     probability: t.probability,
-    raw_text: t.rawText ?? null,
-    reasoning: t.reasoning ?? null,
     confidence: t.confidence ?? 1,
   }));
 
-  return { states, transitions, unattached_text: [], notes: graph.notes ?? [] };
+  return { states, transitions };
 }
 
 // ---------------------------------------------------------------------------

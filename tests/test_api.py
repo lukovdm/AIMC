@@ -3,10 +3,9 @@ Tests for the AIMC FastAPI routes.
 
 instructor.from_provider is mocked so tests run fully offline without an API key.
 The real image from resources/ex1.jpg is used for the upload endpoint
-to exercise file handling, MIME detection and JSON persistence.
+to exercise file handling, MIME detection and DB persistence.
 """
 
-import json
 import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -14,6 +13,8 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlmodel import SQLModel, create_engine
+from sqlalchemy.pool import StaticPool
 
 # Ensure API keys are set before the app modules are imported.
 os.environ.setdefault("MISTRAL_API_KEY", "test-key")
@@ -32,13 +33,20 @@ client = TestClient(app)
 
 
 # ---------------------------------------------------------------------------
-# Fixture: redirect storage to a temp directory for every test
+# Fixture: isolated in-memory SQLite DB for every test
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
-def isolated_media(tmp_path, monkeypatch):
-    """Point storage.MEDIA_DIR at a fresh tmp directory for each test."""
-    monkeypatch.setattr(storage, "MEDIA_DIR", tmp_path / "media")
+def isolated_db(monkeypatch):
+    """Patch storage.get_engine to return a fresh in-memory SQLite engine per test.
+    StaticPool ensures all sessions share the same in-memory connection."""
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SQLModel.metadata.create_all(engine)
+    monkeypatch.setattr(storage, "get_engine", lambda: engine)
 
 
 # ---------------------------------------------------------------------------
@@ -56,8 +64,6 @@ FAKE_MODEL = {
             "to_state": "s1",
             "action": None,
             "probability": 0.8,
-            "raw_text": "0.8",
-            "reasoning": "raw_text is '0.8', already a decimal",
             "confidence": 0.9,
         },
         {
@@ -65,25 +71,24 @@ FAKE_MODEL = {
             "to_state": "s0",
             "action": None,
             "probability": 0.2,
-            "raw_text": "0.2",
-            "reasoning": "raw_text is '0.2', already a decimal",
             "confidence": 0.9,
         },
     ],
-    "unattached_text": [],
-    "notes": [],
 }
 
 
 def make_instructor_client(model_dict: dict | None):
-    """Return a mock instructor client whose .create() returns a validated Model (or raises)."""
+    """Return a mock instructor client whose .create_with_completion() returns (Model, completion)."""
     from aimc.ocr import Model
 
     mock_ic = MagicMock()
     if model_dict is not None:
-        mock_ic.create.return_value = Model.model_validate(model_dict)
+        parsed = Model.model_validate(model_dict)
+        mock_completion = MagicMock()
+        mock_completion.usage = None
+        mock_ic.create_with_completion.return_value = (parsed, mock_completion)
     else:
-        mock_ic.create.return_value = None
+        mock_ic.create_with_completion.return_value = (None, MagicMock())
     return mock_ic
 
 
@@ -123,11 +128,10 @@ class TestUploadFile:
         assert len(data["model"]["states"]) == 2
         assert len(data["model"]["transitions"]) == 2
 
-        # JSON file should have been persisted via storage
+        # Model should have been persisted — round-trip via load_model
         uuid = data["uuid"]
-        saved = storage.MEDIA_DIR / f"{uuid}.json"
-        assert saved.exists()
-        assert json.loads(saved.read_text())["states"][0]["id"] == "s0"
+        loaded = storage.load_model(uuid)
+        assert loaded.states[0].id == "s0"
 
     def test_upload_non_image_rejected(self):
         r = client.post(
@@ -177,12 +181,12 @@ class TestUpdateModel:
         uuid = uuid4()
         storage.save_model(uuid, aimc.ocr.Model.model_validate(FAKE_MODEL))
 
-        updated = {**FAKE_MODEL, "notes": ["updated"]}
+        updated = {**FAKE_MODEL, "states": [{**FAKE_MODEL["states"][0], "label": "Updated"}, FAKE_MODEL["states"][1]]}
         r = client.put(f"/api/model/{uuid}", json=updated)
         assert r.status_code == 200
 
-        saved = json.loads((storage.MEDIA_DIR / f"{uuid}.json").read_text())
-        assert saved["notes"] == ["updated"]
+        loaded = storage.load_model(uuid)
+        assert loaded.states[0].label == "Updated"
 
     def test_update_with_invalid_body_gives_422(self):
         r = client.put(f"/api/model/{uuid4()}", json={"bad": "data"})

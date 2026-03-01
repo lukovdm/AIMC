@@ -185,18 +185,6 @@ export default function SidePanel({
                   >✕</button>
                 </span>
               </div>
-              {/* Row 2: raw text from image */}
-              {t.rawText != null && (
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', paddingLeft: 4 }}>
-                  <span style={{ color: 'var(--accent2)' }}>raw:</span> "{t.rawText}"
-                </div>
-              )}
-              {/* Row 3: reasoning */}
-              {t.reasoning != null && (
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', fontStyle: 'italic', paddingLeft: 4 }}>
-                  {t.reasoning}
-                </div>
-              )}
             </div>
           ))}
           {graph.transitions.length === 0 && (

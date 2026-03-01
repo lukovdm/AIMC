@@ -30,3 +30,4 @@ media/
 !.env.example
 
 **/node_modules
+*.db

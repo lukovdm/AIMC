@@ -13,8 +13,9 @@ hand-drawn Markov chain diagrams and get an interactive, editable graph back.
 - **uv** — package manager (`uv add`, `uv sync`, `uv run`)
 - **FastAPI** — all routes mounted under `/api` prefix via `APIRouter(prefix="/api")`
 - **python-dotenv** — `load_dotenv()` called in `main.py`; secrets in `.env`
-- **instructor** — unified LLM structured-output client; use `instructor.from_provider("provider/model")` + `client.create(response_model=..., messages=[...])`
+- **instructor** — unified LLM structured-output client; use `instructor.from_provider("provider/model")` + `client.create_with_completion(response_model=..., messages=[...])`
 - **Pydantic** — all request/response schemas
+- **SQLModel + SQLite** — persistence layer; DB file at `aimc.db` in project root; no file-based storage
 
 ### Frontend
 
@@ -32,7 +33,7 @@ aimc/
   main.py       # FastAPI app + APIRouter; imports ocr & mc to register routes
   ocr.py        # POST /api/extract — image upload + LLM OCR → structured Model
   mc.py         # GET/PUT /api/model/{uuid}, POST /api/model/{uuid}/simulate
-  storage.py    # Absolute-path file I/O for images (.jpg) and models (.json)
+  storage.py    # SQLModel/SQLite persistence (ModelRecord); get_engine(), save_model(), load_model()
 frontend/
   src/
     api.ts      # All fetch calls to the backend
@@ -41,7 +42,7 @@ frontend/
 resources/      # Test fixtures (ex1.jpg)
 tests/
   test_api.py   # pytest — all routes tested; instructor mocked via _make_client patch
-media/          # Runtime storage for uploaded images + JSON models
+aimc.db         # SQLite database (runtime, gitignored)
 ```
 
 ---
@@ -51,9 +52,11 @@ media/          # Runtime storage for uploaded images + JSON models
 1. Enter the dev shell: `nix develop` (or automatically via direnv)
 2. Install Python deps: `uv sync`
 3. Install frontend deps: `cd frontend && npm install`
-4. Run backend: `uv run fastapi dev aimc/main.py`
-5. Run frontend dev server: `cd frontend && npm run dev`
+4. Run backend: `uv run fastapi dev aimc/main.py --host 0.0.0.0`
+5. Run frontend dev server: `cd frontend && npm run dev` (binds to all interfaces via `--host`)
 6. Run tests: `uv run pytest tests/`
+
+> **Mobile testing**: set `VITE_API_BASE_URL=http://<hostname>:8000` in `frontend/.env.development.local` (gitignored). The frontend dev server is already bound to all interfaces.
 
 ---
 
@@ -73,10 +76,12 @@ media/          # Runtime storage for uploaded images + JSON models
 - Provider selected via `OCR_PROVIDER` env var: `"mistral"` (default) or `"claude"`
 - Model IDs: `mistral/mistral-large-2512`, `anthropic/claude-sonnet-4-6`
 - `_make_client()` calls `instructor.from_provider(model_id)` — lazily so tests can patch it
-- `process_image(path)` is a **single function** for both providers:
+- `process_image(jpeg_bytes: bytes)` is a **single function** for both providers:
+  - Image preprocessing: PIL `thumbnail(1024×1024)` → `convert("L")` (grayscale) → JPEG quality 85 — all in-memory, never saved to disk
   - Mistral image block: `{"type": "image_url", "image_url": "data:{mime};base64,{data}"}`
   - Claude image block: `{"type": "image", "source": {"type": "base64", "media_type": ..., "data": ...}}`
-  - Single `ic.create(response_model=Model, messages=[system + image], ...)` call — no transcription pass
+  - Single `ic.create_with_completion(response_model=Model, messages=[system + image], ...)` call — no transcription pass
+  - Token usage printed to stdout; uses `getattr` fallbacks for `input_tokens`/`prompt_tokens` and `output_tokens`/`completion_tokens`
 - Required env vars: `MISTRAL_API_KEY`, `ANTHROPIC_API_KEY`
 
 ---
@@ -93,14 +98,11 @@ class State(BaseModel):
 
 class Transition(BaseModel):
     from_state: str; to_state: str; action: str | None
-    raw_text: str | None    # verbatim text near the arrow
-    reasoning: str | None   # chain-of-thought for probability conversion
     probability: float | None
     confidence: float
 
 class Model(BaseModel):
     states: list[State]; transitions: list[Transition]
-    unattached_text: list[dict]; notes: list[str]
 ```
 
 ---
@@ -110,6 +112,7 @@ class Model(BaseModel):
 - Test file: `tests/test_api.py`
 - Patch `aimc.ocr._make_client` to return a mock instructor client — avoids all real API calls
 - `OCR_PROVIDER` is forced to `"mistral"` via `os.environ.setdefault` before import
-- Test fixture `isolated_media` monkeypatches `storage.MEDIA_DIR` to a `tmp_path`
+- Test fixture `isolated_db` uses `StaticPool` in-memory SQLite and patches `storage.get_engine` — all sessions share one connection so tables persist across calls
+- Mock client returns `(parsed_model, mock_completion)` tuple from `create_with_completion`; `mock_completion.usage = None`
 - Real image `resources/ex1.jpg` is used for upload tests
 - Run: `uv run pytest tests/test_api.py -v`

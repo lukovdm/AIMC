@@ -119,18 +119,31 @@ def process_image(jpeg_bytes: bytes) -> Model | None:
     mime = "image/jpeg"
 
     if OCR_PROVIDER == "claude":
+        # Claude: mark the static system prompt for caching; image is dynamic
+        system_message = {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "text": EXTRACTION_SYSTEM,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+        }
         image_content = {
             "type": "image",
             "source": {"type": "base64", "media_type": mime, "data": image_data},
         }
     else:
+        # Mistral: prefix caching is automatic — no API changes needed
+        system_message = {"role": "system", "content": EXTRACTION_SYSTEM}
         image_content = {"type": "image_url", "image_url": f"data:{mime};base64,{image_data}"}
 
     ic = _make_client()
     result, completion = ic.create_with_completion(  # type: ignore[call-overload]
         response_model=Model,
         messages=[
-            {"role": "system", "content": EXTRACTION_SYSTEM},
+            system_message,
             {"role": "user", "content": [image_content]},  # type: ignore[list-item]
         ],
         max_tokens=2048,
@@ -139,10 +152,15 @@ def process_image(jpeg_bytes: bytes) -> Model | None:
     if result:
         usage = getattr(completion, "usage", None)
         if usage:
+            cache_read = (
+                getattr(usage, "cache_read_input_tokens", None)
+                or getattr(usage, "cache_creation_input_tokens", None)
+            )
             print(
                 f"[{OCR_PROVIDER}] tokens — "
                 f"input: {getattr(usage, 'input_tokens', None) or getattr(usage, 'prompt_tokens', None)}, "
                 f"output: {getattr(usage, 'output_tokens', None) or getattr(usage, 'completion_tokens', None)}"
+                + (f", cache: {cache_read}" if cache_read else "")
             )
         return result
     return None

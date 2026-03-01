@@ -51,6 +51,12 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
       },
+      allowedHosts: [
+        // Allow serving to LAN IPs for testing on mobile devices.
+        // Override with: VITE_API_BASE_URL=http://localhost:8000 npm run dev
+        "localhost",
+        "barium",
+      ],
     },
   };
 });

@@ -1,0 +1,89 @@
+import os
+from uuid import UUID, uuid4
+from fastapi import HTTPException, UploadFile
+from pydantic import BaseModel
+from mistralai import Mistral
+
+from aimc.main import app
+
+
+class State(BaseModel):
+    id: str
+    label: str
+    initial_state: bool
+    center: dict[str, int]
+    confidence: int
+
+class Transition(BaseModel):
+    from_state: str
+    to_state: str
+    action: str | None
+    probability: int | None
+    label_text: str | None
+    confidence: int
+
+
+class Model(BaseModel):
+    states: list[State]
+    transitions: list[Transition]
+    unattached_text: list[dict]
+    notes: list[str]
+
+
+class UploadResponse(BaseModel):
+    uuid: UUID
+    model: Model
+
+
+api_key = os.environ["MISTRAL_API_KEY"]
+model = "ministral-8b-latest"
+client = Mistral(api_key=api_key)
+
+
+@app.post("/uploadfile")
+async def upload_file(file: UploadFile) -> UploadResponse:
+    if file.content_type and file.filename and file.content_type.startswith("image/"):
+        uuid = uuid4()
+        contents = await file.read()
+        type = file.filename.split(".")[-1]
+        path = f"media/{uuid}.{type}"
+        with open(path, "wb") as f:
+            f.write(contents)
+        mc = process_image(path)
+        if mc:
+            with open(f"media/{uuid}.json", "w") as f:
+                f.write(mc.model_dump_json())
+
+            return UploadResponse(uuid=uuid, model = mc)
+        else:
+            raise HTTPException(status_code=400, detail="could not interpret MC")
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
+
+def process_image(file_path: str) -> Model | None:
+    chat_response = client.chat.parse(
+        model=model,
+        messages=[
+            {
+                "role": "system",
+                "content": """
+You are a diagram parser. Extract a Markov chain from the attached image. 
+Assume the following notation conventions: Circles or rounded boxes represent states. 
+Directed arrows represent transitions. Text inside a state is the state label. An arrow pointing from nothing points to the initial state.
+Text near an arrow is the transition probability. If no probability is written on an outgoing edge, set "probability": null.
+Do NOT normalize probabilities. Do NOT invent missing edges. confidence must be between 0 and 1.
+"""
+            },
+        ],
+        response_format=Model,
+        max_tokens=256,
+        temperature=0
+    )
+    if chat_response and chat_response.choices and chat_response.choices[0].message and chat_response.choices[0].message.parsed:
+        return chat_response.choices[0].message.parsed
+    else:
+        return None
+
+def interpret_ocr_json(json_data):
+    pass

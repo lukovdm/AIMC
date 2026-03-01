@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" rx="32" fill="#1a1a2e"/>
+  <circle cx="64" cy="96" r="22" fill="none" stroke="#e94560" stroke-width="6"/>
+  <circle cx="128" cy="64" r="22" fill="none" stroke="#0f3460" stroke-width="6"/>
+  <circle cx="128" cy="128" r="22" fill="none" stroke="#16213e" stroke-width="6"/>
+  <line x1="86" y1="88" x2="108" y2="72" stroke="#e94560" stroke-width="3" marker-end="url(#a)"/>
+  <line x1="86" y1="104" x2="108" y2="120" stroke="#e94560" stroke-width="3" marker-end="url(#a)"/>
+  <line x1="128" y1="86" x2="128" y2="106" stroke="#e94560" stroke-width="3" marker-end="url(#a)"/>
+  <defs>
+    <marker id="a" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#e94560"/>
+    </marker>
+  </defs>
+  <text x="96" y="174" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#e94560">AIMC</text>
+</svg>

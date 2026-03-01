@@ -38,7 +38,8 @@ interface BackendTransition {
   to_state: string;
   action: string | null;
   probability: number | null;
-  label_text: string | null;
+  raw_text: string | null;
+  reasoning: string | null;
   confidence: number;
 }
 
@@ -56,22 +57,17 @@ interface UploadResponse {
 
 // ---------------------------------------------------------------------------
 // Conversion: BackendModel → ExtractedGraph
-// Backend states have a `center: {x, y}` in pixel coords.
-// We normalize them to [0,1] using the max extent so layout is preserved.
+// Backend state centers are already normalized floats in [0, 1].
 // ---------------------------------------------------------------------------
 
 function backendToGraph(model: BackendModel): ExtractedGraph {
-  // Find bounding box for normalization (fallback to 1 to avoid /0)
-  const xs = model.states.map((s) => s.center.x ?? 0);
-  const ys = model.states.map((s) => s.center.y ?? 0);
-  const maxX = Math.max(...xs, 1);
-  const maxY = Math.max(...ys, 1);
-
   const states = model.states.map((s) => ({
     id: s.id,
     label: s.label,
-    x: (s.center.x ?? 0) / maxX,
-    y: (s.center.y ?? 0) / maxY,
+    x: s.center.x ?? 0,
+    y: s.center.y ?? 0,
+    initialState: s.initial_state,
+    confidence: s.confidence,
   }));
 
   const transitions = model.transitions.map((t, i) => ({
@@ -79,7 +75,9 @@ function backendToGraph(model: BackendModel): ExtractedGraph {
     from: t.from_state,
     to: t.to_state,
     probability: t.probability,
-    labelText: t.label_text,
+    rawText: t.raw_text,
+    reasoning: t.reasoning,
+    confidence: t.confidence,
   }));
 
   return { states, transitions, notes: model.notes };
@@ -93,9 +91,9 @@ function graphToBackend(graph: ExtractedGraph): BackendModel {
   const states: BackendState[] = graph.states.map((s) => ({
     id: s.id,
     label: s.label,
-    initial_state: false,
-    center: { x: Math.round(s.x * 1000), y: Math.round(s.y * 1000) },
-    confidence: 1,
+    initial_state: s.initialState ?? false,
+    center: { x: s.x, y: s.y },
+    confidence: s.confidence ?? 1,
   }));
 
   const transitions: BackendTransition[] = graph.transitions.map((t) => ({
@@ -103,8 +101,9 @@ function graphToBackend(graph: ExtractedGraph): BackendModel {
     to_state: t.to,
     action: null,
     probability: t.probability,
-    label_text: t.labelText ?? null,
-    confidence: 1,
+    raw_text: t.rawText ?? null,
+    reasoning: t.reasoning ?? null,
+    confidence: t.confidence ?? 1,
   }));
 
   return { states, transitions, unattached_text: [], notes: graph.notes ?? [] };
@@ -123,7 +122,7 @@ export async function extractGraph(
 ): Promise<{ graph: ExtractedGraph; uuid: string }> {
   const form = new FormData();
   form.append("file", image, "capture.jpg");
-  const res = await fetch(`${BASE}/uploadfile`, {
+  const res = await fetch(`${BASE}/extract`, {
     method: "POST",
     body: form,
   });

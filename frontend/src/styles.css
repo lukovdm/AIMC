@@ -315,6 +315,11 @@ input:focus { outline: 2px solid var(--accent2); }
   cursor: pointer;
   transition: background 0.1s;
 }
+.panel-item--column {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.15rem;
+}
 .panel-item:hover { background: var(--surface2); }
 .panel-item.selected { background: rgba(83, 216, 251, 0.1); }
 .panel-item .item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

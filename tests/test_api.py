@@ -1,7 +1,7 @@
 """
 Tests for the AIMC FastAPI routes.
 
-Mistral is mocked so tests run fully offline without an API key.
+instructor.from_provider is mocked so tests run fully offline without an API key.
 The real image from resources/ex1.jpg is used for the upload endpoint
 to exercise file handling, MIME detection and JSON persistence.
 """
@@ -15,9 +15,10 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-# Ensure MISTRAL_API_KEY is set before the app modules are imported,
-# otherwise os.environ["MISTRAL_API_KEY"] in ocr.py raises KeyError.
+# Ensure API keys are set before the app modules are imported.
 os.environ.setdefault("MISTRAL_API_KEY", "test-key")
+os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
+os.environ.setdefault("OCR_PROVIDER", "mistral")
 
 from aimc.main import app  # noqa: E402
 import aimc.ocr  # noqa: E402  – imported so we can patch its globals
@@ -46,8 +47,8 @@ def isolated_media(tmp_path, monkeypatch):
 
 FAKE_MODEL = {
     "states": [
-        {"id": "s0", "label": "S0", "initial_state": True,  "center": {"x": 100, "y": 100}, "confidence": 1},
-        {"id": "s1", "label": "S1", "initial_state": False, "center": {"x": 300, "y": 100}, "confidence": 1},
+        {"id": "s0", "label": "S0", "initial_state": True,  "center": {"x": 0.1, "y": 0.5}, "confidence": 0.95},
+        {"id": "s1", "label": "S1", "initial_state": False, "center": {"x": 0.9, "y": 0.5}, "confidence": 0.95},
     ],
     "transitions": [
         {
@@ -55,16 +56,18 @@ FAKE_MODEL = {
             "to_state": "s1",
             "action": None,
             "probability": 0.8,
-            "label_text": "0.8",
-            "confidence": 1,
+            "raw_text": "0.8",
+            "reasoning": "raw_text is '0.8', already a decimal",
+            "confidence": 0.9,
         },
         {
             "from_state": "s0",
             "to_state": "s0",
             "action": None,
             "probability": 0.2,
-            "label_text": "0.2",
-            "confidence": 1,
+            "raw_text": "0.2",
+            "reasoning": "raw_text is '0.2', already a decimal",
+            "confidence": 0.9,
         },
     ],
     "unattached_text": [],
@@ -72,18 +75,21 @@ FAKE_MODEL = {
 }
 
 
-def make_parsed_response(model_dict: dict):
-    """Return a mock that looks like a Mistral chat.parse response."""
+def make_instructor_client(model_dict: dict | None):
+    """Return a mock instructor client whose .create() returns a validated Model (or raises)."""
     from aimc.ocr import Model
 
-    parsed = Model.model_validate(model_dict)
-    message = MagicMock()
-    message.parsed = parsed
-    choice = MagicMock()
-    choice.message = message
-    response = MagicMock()
-    response.choices = [choice]
-    return response
+    mock_ic = MagicMock()
+    if model_dict is not None:
+        mock_ic.create.return_value = Model.model_validate(model_dict)
+    else:
+        mock_ic.create.return_value = None
+    return mock_ic
+
+
+def instructor_patch(model_dict: dict | None):
+    """Context manager: patch aimc.ocr._make_client to return a mock instructor client."""
+    return patch("aimc.ocr._make_client", return_value=make_instructor_client(model_dict))
 
 
 # ---------------------------------------------------------------------------
@@ -97,17 +103,16 @@ def test_root():
 
 
 # ---------------------------------------------------------------------------
-# POST /uploadfile
+# POST /api/extract
 # ---------------------------------------------------------------------------
 
 class TestUploadFile:
     def test_upload_real_image_mocked_mistral(self, tmp_path):
-        """Upload ex1.jpg; Mistral is mocked; check response shape and file persistence."""
-        mock_response = make_parsed_response(FAKE_MODEL)
-        with patch.object(aimc.ocr.client.chat, "parse", return_value=mock_response):
+        """Upload ex1.jpg; instructor is mocked; check response shape and persistence."""
+        with instructor_patch(FAKE_MODEL):
             with open(EX1_JPG, "rb") as f:
                 r = client.post(
-                    "/api/uploadfile",
+                    "/api/extract",
                     files={"file": ("ex1.jpg", f, "image/jpeg")},
                 )
 
@@ -126,17 +131,17 @@ class TestUploadFile:
 
     def test_upload_non_image_rejected(self):
         r = client.post(
-            "/api/uploadfile",
+            "/api/extract",
             files={"file": ("data.csv", b"a,b,c", "text/csv")},
         )
         assert r.status_code == 400
         assert "Unsupported file type" in r.json()["detail"]
 
     def test_upload_mistral_returns_none_gives_400(self):
-        with patch.object(aimc.ocr.client.chat, "parse", return_value=MagicMock(choices=[])):
+        with instructor_patch(None):
             with open(EX1_JPG, "rb") as f:
                 r = client.post(
-                    "/api/uploadfile",
+                    "/api/extract",
                     files={"file": ("ex1.jpg", f, "image/jpeg")},
                 )
 

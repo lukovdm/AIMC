@@ -9,6 +9,8 @@ export type StateNode = {
   x: number;
   /** Normalized y coordinate in [0, 1] relative to rendered image height */
   y: number;
+  initialState?: boolean;
+  confidence?: number;
 };
 
 export type Transition = {
@@ -16,7 +18,11 @@ export type Transition = {
   from: string;
   to: string;
   probability: number | null;
-  labelText?: string | null;
+  /** Exact text copied from the image near the arrow */
+  rawText?: string | null;
+  /** Chain-of-thought reasoning for the probability conversion */
+  reasoning?: string | null;
+  confidence?: number;
 };
 
 export type ExtractedGraph = {

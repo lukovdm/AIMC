@@ -1,0 +1,55 @@
+{
+  "states": [
+    {
+      "id": "A",
+      "label": "A",
+      "x": 0.29512557264292216,
+      "y": 0.5145772945543583
+    },
+    {
+      "id": "B",
+      "label": "B",
+      "x": 0.6125065841708964,
+      "y": 0.3163265487699047
+    },
+    {
+      "id": "C",
+      "label": "C",
+      "x": 0.6115389371348715,
+      "y": 0.5000000208529374
+    },
+    {
+      "id": "D",
+      "label": "D",
+      "x": 0.6192799288632703,
+      "y": 0.6997084599477352
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t-0",
+      "from": "A",
+      "to": "B",
+      "probability": 0.5,
+      "labelText": null
+    },
+    {
+      "id": "t-1",
+      "from": "A",
+      "to": "C",
+      "probability": 0.3,
+      "labelText": null
+    },
+    {
+      "id": "t-2",
+      "from": "A",
+      "to": "D",
+      "probability": 0.2,
+      "labelText": null
+    }
+  ],
+  "notes": [
+    "No transitions from states B, C, and D are shown in the diagram.",
+    "The initial state is A as indicated by the arrow pointing to it."
+  ]
+}

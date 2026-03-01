@@ -24,4 +24,9 @@ build/
 media/
 .direnv/
 
+# Secrets
+.env
+.env.*
+!.env.example
+
 **/node_modules

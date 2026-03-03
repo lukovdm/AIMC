@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from uuid import UUID
 from fastapi import HTTPException
@@ -7,7 +8,7 @@ from sqlmodel import Field, Session, SQLModel, create_engine, select
 # DB location — one file next to the project root
 # ---------------------------------------------------------------------------
 
-_DB_PATH = Path(__file__).parent.parent / "aimc.db"
+_DB_PATH = Path(os.environ.get("AIMC_DB_PATH", str(Path(__file__).parent.parent / "aimc.db")))
 
 
 def get_engine():

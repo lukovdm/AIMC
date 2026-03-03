@@ -71,6 +71,7 @@ in
         DynamicUser      = true;
         StateDirectory   = "aimc";   # /var/lib/aimc — where aimc.db lives
         WorkingDirectory = "/var/lib/aimc";
+        Environment      = "AIMC_DB_PATH=/var/lib/aimc/aimc.db";
         EnvironmentFile  = cfg.environmentFile;
         ExecStart        = "${cfg.package}/bin/uvicorn aimc.main:app --host 127.0.0.1 --port ${toString cfg.port}";
         Restart          = "on-failure";
@@ -79,7 +80,7 @@ in
 
     services.nginx = {
       enable = true;
-      virtualHosts.default = {
+      virtualHosts."aimc" = {
         default  = true;
         listen   = [{ addr = "0.0.0.0"; port = cfg.listenPort; }];
         root     = "${cfg.frontendPackage}";

@@ -13,8 +13,9 @@
 #           package         = aimc.packages.x86_64-linux.aimc;
 #           frontendPackage = aimc.packages.x86_64-linux.aimc-frontend;
 #           environmentFile = "/run/secrets/aimc-env";
+#           listenPort      = 8080;   # optional, defaults to 80
 #         };
-#         networking.firewall.allowedTCPPorts = [ 80 ];
+#         networking.firewall.allowedTCPPorts = [ 8080 ];
 #       }
 #     ];
 #   };
@@ -45,7 +46,13 @@ in
     port = lib.mkOption {
       type    = lib.types.port;
       default = 8000;
-      description = "Port the FastAPI backend listens on.";
+      description = "Port the FastAPI backend listens on (not externally exposed).";
+    };
+
+    listenPort = lib.mkOption {
+      type    = lib.types.port;
+      default = 80;
+      description = "Port nginx listens on.";
     };
 
     environmentFile = lib.mkOption {
@@ -73,8 +80,9 @@ in
     services.nginx = {
       enable = true;
       virtualHosts.default = {
-        default = true;
-        root    = "${cfg.frontendPackage}";
+        default  = true;
+        listen   = [{ addr = "0.0.0.0"; port = cfg.listenPort; }];
+        root     = "${cfg.frontendPackage}";
         locations."/" .tryFiles    = "$uri $uri/ /index.html";
         locations."/api".proxyPass = "http://127.0.0.1:${toString cfg.port}";
         locations."/api".extraConfig = "client_max_body_size 20M;";

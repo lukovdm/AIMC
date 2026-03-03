@@ -15,11 +15,13 @@
 #           environmentFile = "/run/secrets/aimc-env";
 #
 #           # HTTPS option A — ACME / Let's Encrypt (needs a public domain):
-#           hostname = "aimc.example.com";
-#           ssl.acme = true;
+#           hostname   = "aimc.example.com";
+#           listenPort = 443;
+#           ssl.acme   = true;
 #
 #           # HTTPS option B — bring your own cert:
-#           # hostname = "aimc.example.com";
+#           # hostname   = "aimc.example.com";
+#           # listenPort = 443;
 #           # ssl.certFile = "/run/secrets/aimc.crt";
 #           # ssl.keyFile  = "/run/secrets/aimc.key";
 #         };
@@ -67,6 +69,12 @@ in
       type    = lib.types.port;
       default = 8000;
       description = "Port the FastAPI backend listens on (not externally exposed).";
+    };
+
+    listenPort = lib.mkOption {
+      type    = lib.types.port;
+      default = 80;
+      description = "Port nginx listens on. Use 443 when enabling SSL.";
     };
 
     ssl = {
@@ -122,6 +130,7 @@ in
       virtualHosts."aimc" = {
         default    = true;
         serverName = cfg.hostname;
+        listen     = [{ addr = "0.0.0.0"; port = cfg.listenPort; ssl = hasSsl; }];
 
         # SSL via ACME
         enableACME = cfg.ssl.acme;

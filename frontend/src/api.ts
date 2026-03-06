@@ -123,6 +123,17 @@ export async function extractGraph(
 }
 
 /**
+ * POST /model/{uuid}/prop?prop=...  — run a model-checking property query
+ */
+export async function checkModel(uuid: string, prop: string): Promise<unknown> {
+  const res = await fetch(
+    `${BASE}/model/${uuid}/prop?prop=${encodeURIComponent(prop)}`,
+    { method: "POST" },
+  );
+  return handleResponse<unknown>(res);
+}
+
+/**
  * PUT /model/{uuid}   — persist the user's edits back to the server
  * POST /model/{uuid}/simulate?steps=N  — run the simulator
  */

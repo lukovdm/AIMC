@@ -39,4 +39,4 @@ export type SimulationResult =
 // App views
 // ---------------------------------------------------------------------------
 
-export type AppView = "camera" | "review" | "annotate";
+export type AppView = "camera" | "annotate";

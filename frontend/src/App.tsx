@@ -1,9 +1,8 @@
 import { useState, useCallback } from 'react'
 import type { AppView, ExtractedGraph, SimulationResult } from './types'
 import { validateGraph } from './utils/validate'
-import { extractGraph, simulateGraph } from './api'
+import { extractGraph, simulateGraph, checkModel } from './api'
 import CameraView from './components/CameraView'
-import ReviewView from './components/ReviewView'
 import AnnotateView from './components/AnnotateView'
 
 const EMPTY_GRAPH: ExtractedGraph = { states: [], transitions: [] }
@@ -30,9 +29,11 @@ export default function App() {
   const [graph, setGraph] = useState<ExtractedGraph>(EMPTY_GRAPH)
   const [modelUuid, setModelUuid] = useState<string | null>(null)
   const [simOutput, setSimOutput] = useState('')
+  const [modelCheckOutput, setModelCheckOutput] = useState('')
   const [toast, setToast] = useState<string | null>(null)
   const [isExtracting, setIsExtracting] = useState(false)
   const [isSimulating, setIsSimulating] = useState(false)
+  const [isModelChecking, setIsModelChecking] = useState(false)
 
   const warnings = validateGraph(graph)
 
@@ -45,22 +46,10 @@ export default function App() {
   function handleCapture(blob: Blob, url: string) {
     setCapturedBlob(blob)
     setCapturedUrl(url)
-    setView('review')
-  }
-
-  // ---- Review ----
-  function handleRetake() {
-    URL.revokeObjectURL(capturedUrl)
-    setCapturedUrl('')
-    setCapturedBlob(null)
-    setView('camera')
-  }
-
-  function handleUsePhoto() {
     setView('annotate')
   }
 
-  // ---- Annotate ----
+  // ---- Extract ----
   const handleExtract = useCallback(async () => {
     if (!capturedBlob) { showToast('No image to extract from'); return }
     setIsExtracting(true)
@@ -76,6 +65,7 @@ export default function App() {
     }
   }, [capturedBlob])
 
+  // ---- Simulate ----
   const handleSimulate = useCallback(async () => {
     if (!modelUuid) { showToast('Extract the image first to get a model ID'); return }
     setIsSimulating(true)
@@ -89,11 +79,24 @@ export default function App() {
     }
   }, [graph, modelUuid])
 
+  // ---- Model check ----
+  const handleModelCheck = useCallback(async (prop: string) => {
+    if (!modelUuid) { showToast('Extract the image first to get a model ID'); return }
+    setIsModelChecking(true)
+    try {
+      const result = await checkModel(modelUuid, prop)
+      setModelCheckOutput(result != null ? JSON.stringify(result, null, 2) : '(no result)')
+    } catch (err) {
+      showToast(`Model check failed: ${(err as Error).message}`)
+    } finally {
+      setIsModelChecking(false)
+    }
+  }, [modelUuid])
+
+  // ---- Export ----
   function handleExport() {
     const json = JSON.stringify(graph, null, 2)
-    // Copy to clipboard
     navigator.clipboard?.writeText(json).catch(() => {})
-    // Download
     const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -104,9 +107,11 @@ export default function App() {
     showToast('JSON copied + downloaded!')
   }
 
+  // ---- Reset ----
   function handleReset() {
     setGraph(EMPTY_GRAPH)
     setSimOutput('')
+    setModelCheckOutput('')
     setModelUuid(null)
     setView('camera')
     URL.revokeObjectURL(capturedUrl)
@@ -117,24 +122,20 @@ export default function App() {
   return (
     <>
       {view === 'camera' && <CameraView onCapture={handleCapture} />}
-      {view === 'review' && capturedUrl && (
-        <ReviewView
-          imageUrl={capturedUrl}
-          onRetake={handleRetake}
-          onUse={handleUsePhoto}
-        />
-      )}
       {view === 'annotate' && capturedUrl && (
         <AnnotateView
           imageUrl={capturedUrl}
           graph={graph}
           warnings={warnings}
           simulationOutput={simOutput}
+          modelCheckOutput={modelCheckOutput}
           isExtracting={isExtracting}
           isSimulating={isSimulating}
+          isModelChecking={isModelChecking}
           onGraphChange={setGraph}
           onExtract={handleExtract}
           onSimulate={handleSimulate}
+          onModelCheck={handleModelCheck}
           onExport={handleExport}
           onReset={handleReset}
         />
